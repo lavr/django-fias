@@ -73,30 +73,48 @@ def iter_version_info(result):
             yield item
 
 
-try:
-    from zeep.client import Client
-    from zeep import __version__ as zver
-    z_major, z_minor, z_sub = list(map(int, zver.split('.')))
+_client = None
+_parse_func = None
 
-    if z_minor < 20:
-        parse_func = parse_item_as_object
-    elif z_minor > 20:
-        parse_func = parse_item_as_dict
 
-    client = Client(wsdl=wsdl_source)
-except ImportError:
+def _get_client():
     try:
-        from suds.client import Client
+        from zeep.client import Client
+        from zeep import __version__ as zver
+        z_major, z_minor, z_sub = list(map(int, zver.split('.')))
 
-        parse_func = parse_item_as_dict
-        client = Client(url=wsdl_source, proxy=PROXY or None)
+        if z_minor < 20:
+            parse_func = parse_item_as_object
+        elif z_minor > 20:
+            parse_func = parse_item_as_dict
 
+        client = Client(wsdl=wsdl_source)
+        return client, parse_func
     except ImportError:
-        raise ImproperlyConfigured('Не найдено подходящей библиотеки для работы с WSDL.'
-                                   ' Пожалуйста установите zeep или suds!')
+        try:
+            from suds.client import Client
+
+            parse_func = parse_item_as_dict
+            client = Client(url=wsdl_source, proxy=PROXY or None)
+            return client, parse_func
+
+        except ImportError:
+            raise ImproperlyConfigured('Не найдено подходящей библиотеки для работы с WSDL.'
+                                       ' Пожалуйста установите zeep или suds!')
+
+
+def get_client():
+    global _client, _parse_func
+
+    if _client is None:
+        _client, _parse_func = _get_client()
+
+    return _client, _parse_func
 
 
 def fetch_version_info(update_all=False):
+
+    client, parse_func = get_client()
 
     pre_fetch_version.send(object.__class__)
 
